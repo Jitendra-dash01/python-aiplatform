@@ -450,7 +450,8 @@ class AdkApp:
     def stream_query(
         self,
         *,
-        message: Union[str, "ContentDict"],
+        message: str = None,
+        image: Optional[bytes] = None,
         user_id: str,
         session_id: Optional[str] = None,
         **kwargs,
@@ -460,34 +461,41 @@ class AdkApp:
         Args:
             message (str):
                 Required. The message to stream responses for.
+            image (Optional[bytes]):
+                Optional. Image data to stream, in bytes. If provided, the message
+                part will include an image.
             user_id (str):
                 Required. The ID of the user.
             session_id (str):
                 Optional. The ID of the session. If not provided, a new
                 session will be created for the user.
             **kwargs (dict[str, Any]):
-                Optional. Additional keyword arguments to pass to the
-                runner.
+                Optional. Additional keyword arguments to pass to the runner.
 
         Yields:
             The output of querying the ADK application.
         """
         from google.genai import types
-
-        if isinstance(message, Dict):
-            content = types.Content.model_validate(message)
-        elif isinstance(message, str):
-            content = types.Content(role="user", parts=[types.Part(text=message)])
-        else:
-            raise TypeError(
-                "message must be a string or a dictionary representing a Content object."
-            )
+        from typing import Optional, Any
 
         if not self._tmpl_attrs.get("runner"):
             self.set_up()
+
+        # Create the message content
+        parts = []
+        if message:
+            parts.append(types.Part.from_text(text=message))  # Add text part
+        if image:
+            # Add image part using the from_bytes method
+            parts.append(types.Part.from_bytes(data=image, mime_type="image/png"))  # Assuming PNG format
+
+        content = types.Content(role="user", parts=parts)
+
         if not session_id:
             session = self.create_session(user_id=user_id)
             session_id = session.id
+
+        # Stream the response using the runner
         for event in self._tmpl_attrs.get("runner").run(
             user_id=user_id, session_id=session_id, new_message=content, **kwargs
         ):
